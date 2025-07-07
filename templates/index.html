@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OCR Uploader</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 1rem;
+            max-width: 600px;
+            margin: auto;
+            background-color: #f9f9f9;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        /* Skryjeme původní file input */
+        input[type="file"] {
+            display: none;
+        }
+
+        /* Styl labelu, který bude sloužit jako tlačítko pro výběr souboru */
+        label[for="fileInput"] {
+            display: block;
+            width: 100%;
+            background-color: #007bff;
+            color: white;
+            text-align: center;
+            padding: 0.75rem;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            user-select: none;
+            box-sizing: border-box;
+        }
+
+        label[for="fileInput"]:hover {
+            background-color: #0056b3;
+        }
+
+        /* Tlačítko nahrát */
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            font-size: 1rem;
+            box-sizing: border-box;
+            border: none;
+            border-radius: 4px;
+            background-color: #28a745;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #1e7e34;
+        }
+
+        #result, #loadingMessage, #saveMessage {
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        #saveMessage {
+            font-weight: bold;
+        }
+
+        /* Text input pro rozpoznané číslo */
+        #recognizedNumber {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1rem;
+            margin-top: 0.25rem;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <h1>Nahraj štítek jednotky</h1>
+
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" id="fileInput" name="photo" accept="image/*" capture="environment" required />
+        <label for="fileInput">Vybrat soubor</label>
+        <button type="submit">Nahrát</button>
+    </form>
+
+    <p id="loadingMessage" style="display: none;">Zpracovávám obrázek, čekejte…</p>
+
+    <div id="result" style="display: none;">
+        <label for="recognizedNumber">Rozpoznané číslo (můžeš upravit):</label><br/>
+        <input type="text" id="recognizedNumber" name="recognizedNumber" />
+        <button id="saveBtn">Uložit</button>
+    </div>
+
+    <p id="saveMessage"></p>
+
+    <div>
+        <h2>Seznam jednotek</h2>
+        <ul id="unitList"></ul>
+    </div>
+    
+    <script>
+        const uploadForm = document.getElementById('uploadForm');
+        const resultDiv = document.getElementById('result');
+        const recognizedNumberInput = document.getElementById('recognizedNumber');
+        const saveBtn = document.getElementById('saveBtn');
+        const saveMessage = document.getElementById('saveMessage');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const unitList = document.getElementById('unitList'); // <-- tady
+    
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            saveMessage.textContent = '';
+            resultDiv.style.display = 'none';
+            loadingMessage.style.display = 'block';
+    
+            const formData = new FormData(uploadForm);
+    
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+    
+                loadingMessage.style.display = 'none';
+    
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.recognized_number) {
+                        recognizedNumberInput.value = data.recognized_number;
+                        resultDiv.style.display = 'block';
+                    } else {
+                        saveMessage.textContent = 'Číslo nebylo rozpoznáno, zadej ho ručně.';
+                        recognizedNumberInput.value = '';
+                        resultDiv.style.display = 'block';
+                    }
+                } else {
+                    saveMessage.textContent = 'Chyba při nahrávání fotky.';
+                }
+            } catch (error) {
+                loadingMessage.style.display = 'none';
+                saveMessage.textContent = 'Chyba při komunikaci se serverem.';
+            }
+        });
+    
+        saveBtn.addEventListener('click', async () => {
+            const number = recognizedNumberInput.value.trim();
+            if (!/^\d{6}$/.test(number)) {
+                saveMessage.textContent = 'Číslo musí mít přesně 6 číslic.';
+                return;
+            }
+    
+            const formData = new FormData();
+            formData.append('number', number);
+    
+            try {
+                const response = await fetch('/save', {
+                    method: 'POST',
+                    body: formData
+                });
+    
+                if (response.ok) {
+                    const data = await response.json();
+                    saveMessage.textContent = `Číslo ${data.saved_number} bylo uloženo.`;
+    
+                    // Přidat do seznamu
+                    const li = document.createElement('li');
+                    li.textContent = data.saved_number;
+                    unitList.appendChild(li);
+    
+                    recognizedNumberInput.value = '';
+                    resultDiv.style.display = 'none';
+                } else {
+                    saveMessage.textContent = 'Chyba při ukládání čísla.';
+                }
+            } catch (error) {
+                saveMessage.textContent = 'Chyba při komunikaci se serverem.';
+            }
+        });
+    </script>
+</body>
+</html>
